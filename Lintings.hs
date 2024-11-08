@@ -31,9 +31,12 @@ freeVariables (If e1 e2 e3) = freeVariables e1 ++ freeVariables e2 ++ freeVariab
 --------------------------------------------------------------------------------
 -- Reduce expresiones aritméticas/booleanas
 -- Construye sugerencias de la forma (LintCompCst e r)
-lintComputeConstant :: Linting Expr
-lintComputeConstant = undefined
+lintComputeConstantAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintComputeConstantAux (Infix Add (Lit (LitInt x)) (Lit (LitInt y))) acc = if (x + y >= 0) then (Lit (LitInt (x + y)), acc ++ [LintCompCst (Infix Add (Lit (LitInt x)) (Lit (LitInt y))) (Lit (LitInt (x + y)))]) else (Infix Add (Lit (LitInt x)) (Lit (LitInt y)), acc)
 
+lintComputeConstant :: Linting Expr
+lintComputeConstant exp = lintComputeConstantAux exp []
+                    
 
 --------------------------------------------------------------------------------
 -- Eliminación de chequeos redundantes de booleanos
