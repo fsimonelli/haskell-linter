@@ -151,12 +151,21 @@ lintRedBool exp = lintRedBoolAux exp []
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfCondAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
 lintRedIfCondAux (If (Lit (LitBool True)) e1 e2) acc =
-    let sugg = e1
-    in (sugg, acc ++ [LintRedIf (If (Lit (LitBool True)) e1 e2) sugg])
+    let (sugg, acc1) = lintRedIfCondAux e1 acc
+    in (sugg, acc1 ++ [LintRedIf (If (Lit (LitBool True)) sugg e2) sugg])
 
 lintRedIfCondAux (If (Lit (LitBool False)) e1 e2) acc =
-    let sugg = e2
-    in (sugg, acc ++ [LintRedIf (If (Lit (LitBool False)) e1 e2) sugg])
+    let (sugg, acc1) = lintRedIfCondAux e2 acc
+    in (sugg, acc1 ++ [LintRedIf (If (Lit (LitBool False)) e1 sugg) sugg])
+
+lintRedIfCondAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintRedIfCondAux e1 acc
+        (e2', acc2) = lintRedIfCondAux e2 acc1
+        (e3', acc3) = lintRedIfCondAux e3 acc2
+    in 
+        if e1 == e1'
+        then (If e1 e2' e3', acc3)
+        else lintRedIfCondAux (If e1' e2' e3') acc3
 
 lintRedIfCondAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintRedIfCondAux e1 acc
@@ -177,15 +186,6 @@ lintRedIfCondAux (Case e1 e2 (x, y, e3)) acc =
         (e2', acc2) = lintRedIfCondAux e2 acc1
         (e3', acc3) = lintRedIfCondAux e3 acc2
     in (Case e1' e2' (x, y, e3'), acc3)
-
-lintRedIfCondAux (If e1 e2 e3) acc =
-    let (e1', acc1) = lintRedIfCondAux e1 acc
-        (e2', acc2) = lintRedIfCondAux e2 acc1
-        (e3', acc3) = lintRedIfCondAux e3 acc2
-    in 
-        if e1 == e1'
-        then (If e1 e2' e3', acc3)
-        else lintRedIfCondAux (If e1' e2' e3') acc3
 
 lintRedIfCondAux expr acc = (expr, acc)
 
