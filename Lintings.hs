@@ -32,7 +32,63 @@ freeVariables (If e1 e2 e3) = freeVariables e1 ++ freeVariables e2 ++ freeVariab
 -- Reduce expresiones aritméticas/booleanas
 -- Construye sugerencias de la forma (LintCompCst e r)
 lintComputeConstantAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintComputeConstantAux (Infix Add (Lit (LitInt x)) (Lit (LitInt y))) acc = if (x + y >= 0) then (Lit (LitInt (x + y)), acc ++ [LintCompCst (Infix Add (Lit (LitInt x)) (Lit (LitInt y))) (Lit (LitInt (x + y)))]) else (Infix Add (Lit (LitInt x)) (Lit (LitInt y)), acc)
+lintComputeConstantAux (Infix op (Lit (LitInt x)) (Lit (LitInt y))) acc =
+    case op of
+        Add -> if x + y >= 0
+                  then let sugg = Lit (LitInt (x + y))
+                       in (sugg, acc ++ [LintCompCst (Infix Add (Lit (LitInt x)) (Lit (LitInt y))) sugg])
+                  else (Infix Add (Lit (LitInt x)) (Lit (LitInt y)), acc)
+        Sub -> if x - y >= 0
+                  then let sugg = Lit (LitInt (x - y))
+                       in (sugg, acc ++ [LintCompCst (Infix Sub (Lit (LitInt x)) (Lit (LitInt y))) sugg])
+                  else (Infix Sub (Lit (LitInt x)) (Lit (LitInt y)), acc)
+        Mult -> if x * y >= 0
+                then let sugg = Lit (LitInt (x * y))
+                    in (sugg, acc ++ [LintCompCst (Infix Mult (Lit (LitInt x)) (Lit (LitInt y))) sugg])
+                else (Infix Mult (Lit (LitInt x)) (Lit (LitInt y)), acc)
+        Div -> if y /= 0 && x `div` y >= 0
+                  then let sugg = Lit (LitInt (x `div` y))
+                       in (sugg, acc ++ [LintCompCst (Infix Div (Lit (LitInt x)) (Lit (LitInt y))) sugg])
+                  else (Infix Div (Lit (LitInt x)) (Lit (LitInt y)), acc)
+        _ -> (Infix op (Lit (LitInt x)) (Lit (LitInt y)), acc)
+
+lintComputeConstantAux (Infix op (Lit (LitBool x)) (Lit (LitBool y))) acc =
+    case op of
+        And -> let sugg = Lit (LitBool (x && y))
+               in (sugg, acc ++ [LintCompCst (Infix And (Lit (LitBool x)) (Lit (LitBool y))) sugg])
+        Or  -> let sugg = Lit (LitBool (x || y))
+               in (sugg, acc ++ [LintCompCst (Infix Or (Lit (LitBool x)) (Lit (LitBool y))) sugg])
+        _ -> (Infix op (Lit (LitBool x)) (Lit (LitBool y)), acc)
+
+lintComputeConstantAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintComputeConstantAux e1 acc
+        (e2', acc2) = lintComputeConstantAux e2 acc1
+    in if e1 == e1' && e2 == e2'
+       then (Infix op e1 e2, acc2)
+       else lintComputeConstantAux (Infix op e1' e2') acc2
+
+lintComputeConstantAux (App e1 e2) acc =
+    let (e1', acc1) = lintComputeConstantAux e1 acc
+        (e2', acc2) = lintComputeConstantAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintComputeConstantAux (Lam x e) acc =
+    let (e', acc1) = lintComputeConstantAux e acc
+    in (Lam x e', acc1)
+
+lintComputeConstantAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintComputeConstantAux e1 acc
+        (e2', acc2) = lintComputeConstantAux e2 acc1
+        (e3', acc3) = lintComputeConstantAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintComputeConstantAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintComputeConstantAux e1 acc
+        (e2', acc2) = lintComputeConstantAux e2 acc1
+        (e3', acc3) = lintComputeConstantAux e3 acc2
+    in (If e1' e2' e3', acc3)
+
+lintComputeConstantAux expr acc = (expr, acc)
 
 lintComputeConstant :: Linting Expr
 lintComputeConstant exp = lintComputeConstantAux exp []
