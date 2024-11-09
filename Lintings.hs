@@ -101,8 +101,45 @@ lintComputeConstant exp = lintComputeConstantAux exp []
 --------------------------------------------------------------------------------
 -- Elimina chequeos de la forma e == True, True == e, e == False y False == e
 -- Construye sugerencias de la forma (LintBool e r)
+lintRedBoolAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintRedBoolAux (Infix Eq (Lit (LitBool x)) e) acc =
+    let sugg = if x then e else (App (Var "not") e)
+    in (sugg, acc ++ [LintBool (Infix Eq (Lit (LitBool x)) e) sugg])
+
+lintRedBoolAux (Infix Eq e (Lit (LitBool x))) acc =
+    let sugg = if x then e else (App (Var "not") e)
+    in (sugg, acc ++ [LintBool (Infix Eq e (Lit (LitBool x))) sugg])
+
+lintRedBoolAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintRedBoolAux e1 acc
+        (e2', acc2) = lintRedBoolAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintRedBoolAux (App e1 e2) acc =
+    let (e1', acc1) = lintRedBoolAux e1 acc
+        (e2', acc2) = lintRedBoolAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintRedBoolAux (Lam x e) acc =
+    let (e', acc1) = lintRedBoolAux e acc
+    in (Lam x e', acc1)
+
+lintRedBoolAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintRedBoolAux e1 acc
+        (e2', acc2) = lintRedBoolAux e2 acc1
+        (e3', acc3) = lintRedBoolAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintRedBoolAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintRedBoolAux e1 acc
+        (e2', acc2) = lintRedBoolAux e2 acc1
+        (e3', acc3) = lintRedBoolAux e3 acc2
+    in (If e1' e2' e3', acc3)
+
+lintRedBoolAux expr acc = (expr, acc)
+
 lintRedBool :: Linting Expr
-lintRedBool = undefined
+lintRedBool exp = lintRedBoolAux exp []
 
 
 --------------------------------------------------------------------------------
