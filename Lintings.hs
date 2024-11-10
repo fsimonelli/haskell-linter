@@ -163,9 +163,10 @@ lintRedIfCondAux (If e1 e2 e3) acc =
         (e2', acc2) = lintRedIfCondAux e2 acc1
         (e3', acc3) = lintRedIfCondAux e3 acc2
     in 
-        if e1 == e1'
-        then (If e1 e2' e3', acc3)
-        else lintRedIfCondAux (If e1' e2' e3') acc3
+        case e1' of
+            Lit (LitBool True) -> (e2', acc3 ++ [LintRedIf (If e1' e2' e3') e2'])
+            Lit (LitBool False) -> (e3', acc3 ++ [LintRedIf (If e1' e2' e3') e3'])
+            _ -> (If e1 e2' e3', acc3)
 
 lintRedIfCondAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintRedIfCondAux e1 acc
@@ -195,14 +196,90 @@ lintRedIfCond expr = lintRedIfCondAux expr []
 --------------------------------------------------------------------------------
 -- Sustitución de if por conjunción entre la condición y su rama _then_
 -- Construye sugerencias de la forma (LintRedIf e r)
+lintRedIfAndAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintRedIfAndAux (If e1 e2 (Lit(LitBool False))) acc =
+    let (e1', acc1) = lintRedIfAndAux e1 acc
+        (e2', acc2) = lintRedIfAndAux e2 acc1
+        sugg = Infix And e1' e2'
+    in (sugg, acc2 ++ [LintRedIf (If e1' e2' (Lit(LitBool False))) sugg])
+
+lintRedIfAndAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintRedIfAndAux e1 acc
+        (e2', acc2) = lintRedIfAndAux e2 acc1
+        (e3', acc3) = lintRedIfAndAux e3 acc2
+    in 
+        if e3' == Lit (LitBool False)
+        then (Infix And e1' e2', acc3 ++ [LintRedIf (If e1' e2' e3') (Infix And e1' e2')])
+        else (If e1' e2' e3', acc3)
+
+lintRedIfAndAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintRedIfAndAux e1 acc
+        (e2', acc2) = lintRedIfAndAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintRedIfAndAux (App e1 e2) acc =
+    let (e1', acc1) = lintRedIfAndAux e1 acc
+        (e2', acc2) = lintRedIfAndAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintRedIfAndAux (Lam x e) acc =
+    let (e', acc1) = lintRedIfAndAux e acc
+    in (Lam x e', acc1)
+
+lintRedIfAndAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintRedIfAndAux e1 acc
+        (e2', acc2) = lintRedIfAndAux e2 acc1
+        (e3', acc3) = lintRedIfAndAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintRedIfAndAux expr acc = (expr, acc)
+
 lintRedIfAnd :: Linting Expr
-lintRedIfAnd = undefined
+lintRedIfAnd expr = lintRedIfAndAux expr []
 
 --------------------------------------------------------------------------------
 -- Sustitución de if por disyunción entre la condición y su rama _else_
 -- Construye sugerencias de la forma (LintRedIf e r)
+lintRedIfOrAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintRedIfOrAux (If e1 (Lit(LitBool True)) e3) acc =
+    let (e1', acc1) = lintRedIfOrAux e1 acc
+        (e3', acc2) = lintRedIfOrAux e3 acc1
+        sugg = Infix Or e1' e3'
+    in (sugg, acc2 ++ [LintRedIf (If e1' (Lit(LitBool True)) e3') sugg])
+
+lintRedIfOrAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintRedIfOrAux e1 acc
+        (e2', acc2) = lintRedIfOrAux e2 acc1
+        (e3', acc3) = lintRedIfOrAux e3 acc2
+    in 
+        if e2' == Lit (LitBool True)
+        then (Infix Or e1' e3', acc3 ++ [LintRedIf (If e1' e2' e3') (Infix Or e1' e3')])
+        else (If e1' e2' e3', acc3)
+
+lintRedIfOrAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintRedIfOrAux e1 acc
+        (e2', acc2) = lintRedIfOrAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintRedIfOrAux (App e1 e2) acc =
+    let (e1', acc1) = lintRedIfOrAux e1 acc
+        (e2', acc2) = lintRedIfOrAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintRedIfOrAux (Lam x e) acc =
+    let (e', acc1) = lintRedIfOrAux e acc
+    in (Lam x e', acc1)
+
+lintRedIfOrAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintRedIfOrAux e1 acc
+        (e2', acc2) = lintRedIfOrAux e2 acc1
+        (e3', acc3) = lintRedIfOrAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+    
+lintRedIfOrAux expr acc = (expr, acc)
+
 lintRedIfOr :: Linting Expr
-lintRedIfOr = undefined
+lintRedIfOr expr = lintRedIfOrAux expr []
 
 --------------------------------------------------------------------------------
 -- Chequeo de lista vacía
