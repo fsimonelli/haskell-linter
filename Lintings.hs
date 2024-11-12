@@ -354,8 +354,52 @@ lintNull expr = lintNullAux expr []
 -- se aplica en casos de la forma (e:[] ++ es), reemplazando por (e:es)
 -- Construye sugerencias de la forma (LintAppend e r)
 
+lintAppendAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintAppendAux (Infix Append (Infix Cons e (Lit LitNil)) es) acc =
+    let (e', acc1) = lintAppendAux e acc
+        (es', acc2) = lintAppendAux es acc1
+    in (Infix Cons e' es', 
+        acc2 ++ [LintAppend (Infix Append (Infix Cons e' (Lit LitNil)) es') (Infix Cons e' es')])
+
+lintAppendAux (Infix Append e1 e2) acc =
+    let (e1', acc1) = lintAppendAux e1 acc
+        (e2', acc2) = lintAppendAux e2 acc1
+    in 
+        case e1' of
+            Infix Cons e (Lit LitNil) -> (Infix Cons e e2', 
+                                           acc2 ++ [LintAppend (Infix Append (Infix Cons e (Lit LitNil)) e2') (Infix Cons e e2')])
+            _ -> (Infix Append e1' e2', acc2)
+
+lintAppendAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintAppendAux e1 acc
+        (e2', acc2) = lintAppendAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintAppendAux (App e1 e2) acc =
+    let (e1', acc1) = lintAppendAux e1 acc
+        (e2', acc2) = lintAppendAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintAppendAux (Lam x e) acc =
+    let (e', acc1) = lintAppendAux e acc
+    in (Lam x e', acc1)
+
+lintAppendAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintAppendAux e1 acc
+        (e2', acc2) = lintAppendAux e2 acc1
+        (e3', acc3) = lintAppendAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintAppendAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintAppendAux e1 acc
+        (e2', acc2) = lintAppendAux e2 acc1
+        (e3', acc3) = lintAppendAux e3 acc2
+    in (If e1' e2' e3', acc3)
+
+lintAppendAux expr acc = (expr, acc)
+
 lintAppend :: Linting Expr
-lintAppend = undefined
+lintAppend expr = lintAppendAux expr []
 
 --------------------------------------------------------------------------------
 -- Composición
