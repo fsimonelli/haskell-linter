@@ -415,9 +415,43 @@ lintComp expr = lintCompAux expr []
 --------------------------------------------------------------------------------
 -- se aplica en casos de la forma \x -> e x, reemplazando por e
 -- Construye sugerencias de la forma (LintEta e r)
+lintEtaAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintEtaAux (Lam x e) acc =
+    let (e', acc1) = lintEtaAux e acc
+    in 
+        case e' of
+            App e1 (Var x) -> 
+                if x `elem` freeVariables e1 then 
+                    (Lam x e', acc1)
+                else (e1, acc1 ++ [LintEta (Lam x e) e1])
+            _ -> (Lam x e', acc1)
+
+lintEtaAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintEtaAux e1 acc
+        (e2', acc2) = lintEtaAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintEtaAux (App e1 e2) acc =
+    let (e1', acc1) = lintEtaAux e1 acc
+        (e2', acc2) = lintEtaAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintEtaAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintEtaAux e1 acc
+        (e2', acc2) = lintEtaAux e2 acc1
+        (e3', acc3) = lintEtaAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintEtaAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintEtaAux e1 acc
+        (e2', acc2) = lintEtaAux e2 acc1
+        (e3', acc3) = lintEtaAux e3 acc2
+    in (If e1' e2' e3', acc3)
+
+lintEtaAux expr acc = (expr, acc)
 
 lintEta :: Linting Expr
-lintEta = undefined
+lintEta expr = lintEtaAux expr [] 
 
 
 --------------------------------------------------------------------------------
