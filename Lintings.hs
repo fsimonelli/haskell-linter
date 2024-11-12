@@ -103,12 +103,22 @@ lintComputeConstant exp = lintComputeConstantAux exp []
 -- Construye sugerencias de la forma (LintBool e r)
 lintRedBoolAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
 lintRedBoolAux (Infix Eq (Lit (LitBool x)) e) acc =
-    let sugg = if x then e else (App (Var "not") e)
-    in (sugg, acc ++ [LintBool (Infix Eq (Lit (LitBool x)) e) sugg])
+    let (e', acc1) = lintRedBoolAux e acc
+        sugg = if x then e' else (App (Var "not") e')
+    in (sugg, acc1 ++ [LintBool (Infix Eq (Lit (LitBool x)) e') sugg])
 
 lintRedBoolAux (Infix Eq e (Lit (LitBool x))) acc =
-    let sugg = if x then e else (App (Var "not") e)
-    in (sugg, acc ++ [LintBool (Infix Eq e (Lit (LitBool x))) sugg])
+    let (e', acc1) = lintRedBoolAux e acc
+        sugg = if x then e' else (App (Var "not") e')
+    in (sugg, acc1 ++ [LintBool (Infix Eq e' (Lit (LitBool x))) sugg])
+
+lintRedBoolAux (Infix Eq e1 e2) acc =
+    let (e1', acc1) = lintRedBoolAux e1 acc
+        (e2', acc2) = lintRedBoolAux e2 acc1
+    in
+        if (e1 == e1' && e2 == e2')
+        then (Infix Eq e1 e2, acc2)
+        else lintRedBoolAux (Infix Eq e1' e2') acc2 
 
 lintRedBoolAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintRedBoolAux e1 acc
@@ -286,9 +296,57 @@ lintRedIfOr expr = lintRedIfOrAux expr []
 --------------------------------------------------------------------------------
 -- Sugiere el uso de null para verificar si una lista es vacía
 -- Construye sugerencias de la forma (LintNull e r)
+lintNullAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintNullAux (Infix Eq (Lit LitNil) e) acc =
+    let (e', acc1) = lintNullAux e acc
+        sugg = App (Var "null") e'
+    in (sugg, acc1 ++ [LintNull (Infix Eq (Lit LitNil) e') sugg])
+
+lintNullAux (Infix Eq e (Lit LitNil)) acc =
+    let (e', acc1) = lintNullAux e acc
+        sugg = App (Var "null") e'
+    in (sugg, acc1 ++ [LintNull (Infix Eq e' (Lit LitNil)) sugg])
+
+lintNullAux (Infix Eq (App (Var "length") e) (Lit (LitInt 0))) acc =
+    let (e', acc1) = lintNullAux e acc
+        sugg = App (Var "null") e'
+    in (sugg, acc1 ++ [LintNull (Infix Eq (App (Var "length") e') (Lit (LitInt 0))) sugg])
+
+lintNullAux (Infix Eq (Lit (LitInt 0)) (App (Var "length") e)) acc =
+    let (e', acc1) = lintNullAux e acc
+        sugg = App (Var "null") e'
+    in (sugg, acc1 ++ [LintNull (Infix Eq (Lit (LitInt 0)) (App (Var "length") e')) sugg])
+
+lintNullAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintNullAux e1 acc
+        (e2', acc2) = lintNullAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintNullAux (App e1 e2) acc =
+    let (e1', acc1) = lintNullAux e1 acc
+        (e2', acc2) = lintNullAux e2 acc1
+    in (App e1' e2', acc2)
+
+lintNullAux (Lam x e) acc =
+    let (e', acc1) = lintNullAux e acc
+    in (Lam x e', acc1)
+
+lintNullAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintNullAux e1 acc
+        (e2', acc2) = lintNullAux e2 acc1
+        (e3', acc3) = lintNullAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintNullAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintNullAux e1 acc
+        (e2', acc2) = lintNullAux e2 acc1
+        (e3', acc3) = lintNullAux e3 acc2
+    in (If e1' e2' e3', acc3)
+
+lintNullAux expr acc = (expr, acc)
 
 lintNull :: Linting Expr
-lintNull = undefined
+lintNull expr = lintNullAux expr []
 
 --------------------------------------------------------------------------------
 -- Eliminación de la concatenación
