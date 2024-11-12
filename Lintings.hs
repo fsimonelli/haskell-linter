@@ -32,40 +32,55 @@ freeVariables (If e1 e2 e3) = freeVariables e1 ++ freeVariables e2 ++ freeVariab
 -- Reduce expresiones aritméticas/booleanas
 -- Construye sugerencias de la forma (LintCompCst e r)
 lintComputeConstantAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintComputeConstantAux (Infix op (Lit (LitInt x)) (Lit (LitInt y))) acc =
-    case op of
-        Add -> if x + y >= 0
-                  then let sugg = Lit (LitInt (x + y))
-                       in (sugg, acc ++ [LintCompCst (Infix Add (Lit (LitInt x)) (Lit (LitInt y))) sugg])
-                  else (Infix Add (Lit (LitInt x)) (Lit (LitInt y)), acc)
-        Sub -> if x - y >= 0
-                  then let sugg = Lit (LitInt (x - y))
-                       in (sugg, acc ++ [LintCompCst (Infix Sub (Lit (LitInt x)) (Lit (LitInt y))) sugg])
-                  else (Infix Sub (Lit (LitInt x)) (Lit (LitInt y)), acc)
-        Mult -> if x * y >= 0
-                then let sugg = Lit (LitInt (x * y))
-                    in (sugg, acc ++ [LintCompCst (Infix Mult (Lit (LitInt x)) (Lit (LitInt y))) sugg])
-                else (Infix Mult (Lit (LitInt x)) (Lit (LitInt y)), acc)
-        Div -> if y /= 0 && x `div` y >= 0
-                  then let sugg = Lit (LitInt (x `div` y))
-                       in (sugg, acc ++ [LintCompCst (Infix Div (Lit (LitInt x)) (Lit (LitInt y))) sugg])
-                  else (Infix Div (Lit (LitInt x)) (Lit (LitInt y)), acc)
-        _ -> (Infix op (Lit (LitInt x)) (Lit (LitInt y)), acc)
-
-lintComputeConstantAux (Infix op (Lit (LitBool x)) (Lit (LitBool y))) acc =
-    case op of
-        And -> let sugg = Lit (LitBool (x && y))
-               in (sugg, acc ++ [LintCompCst (Infix And (Lit (LitBool x)) (Lit (LitBool y))) sugg])
-        Or  -> let sugg = Lit (LitBool (x || y))
-               in (sugg, acc ++ [LintCompCst (Infix Or (Lit (LitBool x)) (Lit (LitBool y))) sugg])
-        _ -> (Infix op (Lit (LitBool x)) (Lit (LitBool y)), acc)
-
 lintComputeConstantAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintComputeConstantAux e1 acc
         (e2', acc2) = lintComputeConstantAux e2 acc1
-    in if e1 == e1' && e2 == e2'
-       then (Infix op e1 e2, acc2)
-       else lintComputeConstantAux (Infix op e1' e2') acc2
+    in case op of
+        Add -> case e1' of
+            Lit (LitInt x) -> case e2' of
+                Lit (LitInt y) -> if x + y >= 0
+                                    then let sugg = Lit (LitInt (x + y))
+                                         in (sugg, acc2 ++ [LintCompCst (Infix Add e1' e2') sugg])
+                                    else (Infix Add e1' e2', acc2)
+                _ -> (Infix Add e1' e2', acc2)
+            _ -> (Infix Add e1' e2', acc2)
+        Sub -> case e1' of
+            Lit (LitInt x) -> case e2' of
+                Lit (LitInt y) -> if x - y >= 0
+                                    then let sugg = Lit (LitInt (x - y))
+                                         in (sugg, acc2 ++ [LintCompCst (Infix Sub e1' e2') sugg])
+                                    else (Infix Sub e1' e2', acc2)
+                _ -> (Infix Sub e1' e2', acc2)
+            _ -> (Infix Sub e1' e2', acc2)
+        Mult -> case e1' of
+            Lit (LitInt x) -> case e2' of
+                Lit (LitInt y) -> if x * y >= 0
+                                    then let sugg = Lit (LitInt (x * y))
+                                         in (sugg, acc2 ++ [LintCompCst (Infix Mult e1' e2') sugg])
+                                    else (Infix Mult e1' e2', acc2)
+                _ -> (Infix Mult e1' e2', acc2)
+            _ -> (Infix Mult e1' e2', acc2)
+        Div -> case e1' of
+            Lit (LitInt x) -> case e2' of
+                Lit (LitInt y) -> if y /= 0 && x `div` y >= 0
+                                    then let sugg = Lit (LitInt (x `div` y))
+                                         in (sugg, acc2 ++ [LintCompCst (Infix Div e1' e2') sugg])
+                                    else (Infix Div e1' e2', acc2)
+                _ -> (Infix Div e1' e2', acc2)
+        And -> case e1' of
+            Lit (LitBool x) -> case e2' of
+                Lit (LitBool y) -> let sugg = Lit (LitBool (x && y))
+                                   in (sugg, acc2 ++ [LintCompCst (Infix And e1' e2') sugg])
+                _ -> (Infix And e1' e2', acc2)
+            _ -> (Infix And e1' e2', acc2)
+        Or -> case e1' of
+            Lit (LitBool x) -> case e2' of
+                Lit (LitBool y) -> let sugg = Lit (LitBool (x || y))
+                                   in (sugg, acc2 ++ [LintCompCst (Infix Or e1' e2') sugg])
+                _ -> (Infix Or e1' e2', acc2)
+            _ -> (Infix Or e1' e2', acc2)
+        _ -> (Infix op e1' e2', acc2)
+        
 
 lintComputeConstantAux (App e1 e2) acc =
     let (e1', acc1) = lintComputeConstantAux e1 acc
@@ -102,28 +117,19 @@ lintComputeConstant exp = lintComputeConstantAux exp []
 -- Elimina chequeos de la forma e == True, True == e, e == False y False == e
 -- Construye sugerencias de la forma (LintBool e r)
 lintRedBoolAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintRedBoolAux (Infix Eq (Lit (LitBool x)) e) acc =
-    let (e', acc1) = lintRedBoolAux e acc
-        sugg = if x then e' else (App (Var "not") e')
-    in (sugg, acc1 ++ [LintBool (Infix Eq (Lit (LitBool x)) e') sugg])
-
-lintRedBoolAux (Infix Eq e (Lit (LitBool x))) acc =
-    let (e', acc1) = lintRedBoolAux e acc
-        sugg = if x then e' else (App (Var "not") e')
-    in (sugg, acc1 ++ [LintBool (Infix Eq e' (Lit (LitBool x))) sugg])
-
-lintRedBoolAux (Infix Eq e1 e2) acc =
-    let (e1', acc1) = lintRedBoolAux e1 acc
-        (e2', acc2) = lintRedBoolAux e2 acc1
-    in
-        if (e1 == e1' && e2 == e2')
-        then (Infix Eq e1 e2, acc2)
-        else lintRedBoolAux (Infix Eq e1' e2') acc2 
-
 lintRedBoolAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintRedBoolAux e1 acc
         (e2', acc2) = lintRedBoolAux e2 acc1
-    in (Infix op e1' e2', acc2)
+    in 
+        case op of
+            Eq -> case e1 of
+                Lit(LitBool True) -> (e2', acc2 ++ [LintBool (Infix Eq e1' e2') e2'])
+                Lit(LitBool False) -> (App (Var "not") e2', acc2 ++ [LintBool (Infix Eq e1' e2') (App (Var "not") e2')])
+                _ -> case e2 of
+                    Lit(LitBool True) -> (e1', acc2 ++ [LintBool (Infix Eq e1' e2') e1'])
+                    Lit(LitBool False) -> (App (Var "not") e1', acc2 ++ [LintBool (Infix Eq e1' e2') (App (Var "not") e1')])
+                    _ -> (Infix op e1' e2', acc2)
+            _ -> (Infix op e1' e2', acc2)
 
 lintRedBoolAux (App e1 e2) acc =
     let (e1', acc1) = lintRedBoolAux e1 acc
@@ -160,14 +166,6 @@ lintRedBool exp = lintRedBoolAux exp []
 -- Sustitución de if con literal en la condición por la rama correspondiente
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfCondAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintRedIfCondAux (If (Lit (LitBool True)) e1 e2) acc =
-    let (sugg, acc1) = lintRedIfCondAux e1 acc
-    in (sugg, acc1 ++ [LintRedIf (If (Lit (LitBool True)) sugg e2) sugg])
-
-lintRedIfCondAux (If (Lit (LitBool False)) e1 e2) acc =
-    let (sugg, acc1) = lintRedIfCondAux e2 acc
-    in (sugg, acc1 ++ [LintRedIf (If (Lit (LitBool False)) e1 sugg) sugg])
-
 lintRedIfCondAux (If e1 e2 e3) acc =
     let (e1', acc1) = lintRedIfCondAux e1 acc
         (e2', acc2) = lintRedIfCondAux e2 acc1
@@ -207,12 +205,6 @@ lintRedIfCond expr = lintRedIfCondAux expr []
 -- Sustitución de if por conjunción entre la condición y su rama _then_
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfAndAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintRedIfAndAux (If e1 e2 (Lit(LitBool False))) acc =
-    let (e1', acc1) = lintRedIfAndAux e1 acc
-        (e2', acc2) = lintRedIfAndAux e2 acc1
-        sugg = Infix And e1' e2'
-    in (sugg, acc2 ++ [LintRedIf (If e1' e2' (Lit(LitBool False))) sugg])
-
 lintRedIfAndAux (If e1 e2 e3) acc =
     let (e1', acc1) = lintRedIfAndAux e1 acc
         (e2', acc2) = lintRedIfAndAux e2 acc1
@@ -251,12 +243,6 @@ lintRedIfAnd expr = lintRedIfAndAux expr []
 -- Sustitución de if por disyunción entre la condición y su rama _else_
 -- Construye sugerencias de la forma (LintRedIf e r)
 lintRedIfOrAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintRedIfOrAux (If e1 (Lit(LitBool True)) e3) acc =
-    let (e1', acc1) = lintRedIfOrAux e1 acc
-        (e3', acc2) = lintRedIfOrAux e3 acc1
-        sugg = Infix Or e1' e3'
-    in (sugg, acc2 ++ [LintRedIf (If e1' (Lit(LitBool True)) e3') sugg])
-
 lintRedIfOrAux (If e1 e2 e3) acc =
     let (e1', acc1) = lintRedIfOrAux e1 acc
         (e2', acc2) = lintRedIfOrAux e2 acc1
@@ -297,30 +283,18 @@ lintRedIfOr expr = lintRedIfOrAux expr []
 -- Sugiere el uso de null para verificar si una lista es vacía
 -- Construye sugerencias de la forma (LintNull e r)
 lintNullAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintNullAux (Infix Eq (Lit LitNil) e) acc =
-    let (e', acc1) = lintNullAux e acc
-        sugg = App (Var "null") e'
-    in (sugg, acc1 ++ [LintNull (Infix Eq (Lit LitNil) e') sugg])
-
-lintNullAux (Infix Eq e (Lit LitNil)) acc =
-    let (e', acc1) = lintNullAux e acc
-        sugg = App (Var "null") e'
-    in (sugg, acc1 ++ [LintNull (Infix Eq e' (Lit LitNil)) sugg])
-
-lintNullAux (Infix Eq (App (Var "length") e) (Lit (LitInt 0))) acc =
-    let (e', acc1) = lintNullAux e acc
-        sugg = App (Var "null") e'
-    in (sugg, acc1 ++ [LintNull (Infix Eq (App (Var "length") e') (Lit (LitInt 0))) sugg])
-
-lintNullAux (Infix Eq (Lit (LitInt 0)) (App (Var "length") e)) acc =
-    let (e', acc1) = lintNullAux e acc
-        sugg = App (Var "null") e'
-    in (sugg, acc1 ++ [LintNull (Infix Eq (Lit (LitInt 0)) (App (Var "length") e')) sugg])
-
 lintNullAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintNullAux e1 acc
         (e2', acc2) = lintNullAux e2 acc1
-    in (Infix op e1' e2', acc2)
+    in case op of
+        Eq -> case e1' of
+            Lit LitNil -> (App (Var "null") e2', acc2 ++ [LintNull (Infix Eq e1' e2') (App (Var "null") e2')])
+            App (Var "length") e -> (App (Var "null") e, acc2 ++ [LintNull (Infix Eq e1' e2') (App (Var "null") e)])
+            _ -> case e2' of
+                Lit LitNil -> (App (Var "null") e1', acc2 ++ [LintNull (Infix Eq e1' e2') (App (Var "null") e1')])
+                App (Var "length") e -> (App (Var "null") e, acc2 ++ [LintNull (Infix Eq e1' e2') (App (Var "null") e)])
+                _ ->(Infix op e1' e2', acc2)
+        _ ->(Infix op e1' e2', acc2)
 
 lintNullAux (App e1 e2) acc =
     let (e1', acc1) = lintNullAux e1 acc
@@ -355,12 +329,6 @@ lintNull expr = lintNullAux expr []
 -- Construye sugerencias de la forma (LintAppend e r)
 
 lintAppendAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
-lintAppendAux (Infix Append (Infix Cons e (Lit LitNil)) es) acc =
-    let (e', acc1) = lintAppendAux e acc
-        (es', acc2) = lintAppendAux es acc1
-    in (Infix Cons e' es', 
-        acc2 ++ [LintAppend (Infix Append (Infix Cons e' (Lit LitNil)) es') (Infix Cons e' es')])
-
 lintAppendAux (Infix Append e1 e2) acc =
     let (e1', acc1) = lintAppendAux e1 acc
         (e2', acc2) = lintAppendAux e2 acc1
