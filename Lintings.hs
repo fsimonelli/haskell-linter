@@ -406,9 +406,40 @@ lintAppend expr = lintAppendAux expr []
 --------------------------------------------------------------------------------
 -- se aplica en casos de la forma (f (g t)), reemplazando por (f . g) t
 -- Construye sugerencias de la forma (LintComp e r)
+lintCompAux :: Expr -> [LintSugg] -> (Expr, [LintSugg])
+lintCompAux (App e1 e2) acc =
+    let (e1', acc1) = lintCompAux e1 acc
+        (e2', acc2) = lintCompAux e2 acc1
+    in 
+        case e2' of
+            App e3 e4 -> (App (Infix Comp e1' e3) e4 , acc2 ++ [LintComp (App e1' e2') (App (Infix Comp e1' e3) e4)])
+            _ -> (App e1' e2', acc2)
+
+lintCompAux (Infix op e1 e2) acc =
+    let (e1', acc1) = lintCompAux e1 acc
+        (e2', acc2) = lintCompAux e2 acc1
+    in (Infix op e1' e2', acc2)
+
+lintCompAux (Lam x e) acc =
+    let (e', acc1) = lintCompAux e acc
+    in (Lam x e', acc1)
+
+lintCompAux (Case e1 e2 (x, y, e3)) acc =
+    let (e1', acc1) = lintCompAux e1 acc
+        (e2', acc2) = lintCompAux e2 acc1
+        (e3', acc3) = lintCompAux e3 acc2
+    in (Case e1' e2' (x, y, e3'), acc3)
+
+lintCompAux (If e1 e2 e3) acc =
+    let (e1', acc1) = lintCompAux e1 acc
+        (e2', acc2) = lintCompAux e2 acc1
+        (e3', acc3) = lintCompAux e3 acc2
+    in (If e1' e2' e3', acc3)
+
+lintCompAux expr acc = (expr, acc)
 
 lintComp :: Linting Expr
-lintComp = undefined
+lintComp expr = lintCompAux expr []
 
 
 --------------------------------------------------------------------------------
