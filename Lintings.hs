@@ -121,15 +121,17 @@ lintRedBoolAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintRedBoolAux e1 acc
         (e2', acc2) = lintRedBoolAux e2 acc1
     in 
-        case op of
-            Eq -> case e1 of
-                Lit(LitBool True) -> (e2', acc2 ++ [LintBool (Infix Eq e1' e2') e2'])
-                Lit(LitBool False) -> (App (Var "not") e2', acc2 ++ [LintBool (Infix Eq e1' e2') (App (Var "not") e2')])
-                _ -> case e2 of
-                    Lit(LitBool True) -> (e1', acc2 ++ [LintBool (Infix Eq e1' e2') e1'])
-                    Lit(LitBool False) -> (App (Var "not") e1', acc2 ++ [LintBool (Infix Eq e1' e2') (App (Var "not") e1')])
-                    _ -> (Infix op e1' e2', acc2)
-            _ -> (Infix op e1' e2', acc2)
+        if (op == Eq) then
+            if (e1' == Lit(LitBool True)) then
+                (e2', acc2 ++ [LintBool (Infix Eq e1' e2') e2'])
+            else if (e2' == Lit(LitBool True)) then
+                (e1', acc2 ++ [LintBool (Infix Eq e1' e2') e1'])
+            else if (e1' == Lit(LitBool False)) then
+                (App (Var "not") e2', acc2 ++ [LintBool (Infix Eq e1' e2') (App (Var "not") e2')])
+            else if (e2' == Lit(LitBool False)) then
+                (App (Var "not") e1', acc2 ++ [LintBool (Infix Eq e1' e2') (App (Var "not") e1')])
+            else (Infix op e1' e2', acc2)
+        else (Infix op e1' e2', acc2)
 
 lintRedBoolAux (App e1 e2) acc =
     let (e1', acc1) = lintRedBoolAux e1 acc
@@ -174,7 +176,7 @@ lintRedIfCondAux (If e1 e2 e3) acc =
         case e1' of
             Lit (LitBool True) -> (e2', acc3 ++ [LintRedIf (If e1' e2' e3') e2'])
             Lit (LitBool False) -> (e3', acc3 ++ [LintRedIf (If e1' e2' e3') e3'])
-            _ -> (If e1 e2' e3', acc3)
+            _ -> (If e1' e2' e3', acc3)
 
 lintRedIfCondAux (Infix op e1 e2) acc =
     let (e1', acc1) = lintRedIfCondAux e1 acc
@@ -420,10 +422,10 @@ lintEtaAux (Lam x e) acc =
     let (e', acc1) = lintEtaAux e acc
     in 
         case e' of
-            App e1 (Var x) -> 
-                if x `elem` freeVariables e1 then 
-                    (Lam x e', acc1)
-                else (e1, acc1 ++ [LintEta (Lam x e) e1])
+            App e1 (Var xVar) -> 
+                if xVar==x && not(x `elem` freeVariables e1) then 
+                   (e1, acc1 ++ [LintEta (Lam x e') e1]) 
+                else (Lam x e', acc1)
             _ -> (Lam x e', acc1)
 
 lintEtaAux (Infix op e1 e2) acc =
@@ -463,9 +465,9 @@ lintEta expr = lintEtaAux expr []
 lintMap :: Linting FunDef
 lintMap (FunDef func expr) =
     case expr of
-        Lam lamVar (Case (Var caseVar) (Lit LitNil) (xName, xsName, Infix Cons e(App (Var func) (Var xsVar)))) ->
+        Lam lamVar (Case (Var caseVar) (Lit LitNil) (xName, xsName, Infix Cons e(App (Var funcVar) (Var xsVar)))) ->
             if (
-                caseVar == lamVar && xsVar == xsName &&
+                caseVar == lamVar && xsVar == xsName && funcVar == func &&
                 not (lamVar `elem` freeVariables e) &&
                 not (xsVar `elem` freeVariables e) && 
                 not (func `elem` freeVariables e)
