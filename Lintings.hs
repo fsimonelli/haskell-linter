@@ -484,13 +484,23 @@ lintMap (FunDef func expr) =
 -- Dada una transformación a nivel de expresión, se construye
 -- una transformación a nivel de función
 liftToFunc :: Linting Expr -> Linting FunDef
-liftToFunc = undefined
+liftToFunc lint (FunDef name body) =
+    let (newBody, suggs) = lint body
+    in (FunDef name newBody, suggs)
 
 -- encadenar transformaciones:
 (>==>) :: Linting a -> Linting a -> Linting a
-lint1 >==> lint2 = undefined
+(lint1 >==> lint2) expr = 
+    let (result1, suggs1) = lint1 expr
+        (result2, suggs2) = lint2 result1
+    in (result2, suggs1 ++ suggs2)
 
 -- aplica las transformaciones 'lints' repetidas veces y de forma incremental,
 -- hasta que ya no generen más cambios en 'func'
-lintRec :: Linting a -> Linting a
-lintRec lints func = undefined
+lintRec :: Eq a => Linting a -> Linting a
+lintRec lint expr =
+    let (result, suggs) = lint expr
+    in if result == expr
+       then (result, suggs)
+       else let (finalResult, finalSuggs) = lintRec lint result
+            in (finalResult, suggs ++ finalSuggs)
