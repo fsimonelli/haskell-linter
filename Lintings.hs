@@ -461,7 +461,19 @@ lintEta expr = lintEtaAux expr []
 -- Sustituye recursión sobre listas por `map`
 -- Construye sugerencias de la forma (LintMap f r)
 lintMap :: Linting FunDef
-lintMap = undefined
+lintMap (FunDef func expr) =
+    case expr of
+        Lam lamVar (Case (Var caseVar) (Lit LitNil) (xName, xsName, Infix Cons e(App (Var func) (Var xsVar)))) ->
+            if (
+                caseVar == lamVar && xsVar == xsName &&
+                not (lamVar `elem` freeVariables e) &&
+                not (xsVar `elem` freeVariables e) && 
+                not (func `elem` freeVariables e)
+            ) then
+                let sugg = FunDef func (App (Var "map") (Lam xName e))
+                in (sugg, [LintMap (FunDef func expr) sugg])
+            else (FunDef func expr, [])
+        _ -> (FunDef func expr, [])
 
 
 --------------------------------------------------------------------------------
